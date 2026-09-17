@@ -1,0 +1,44 @@
+name: CI
+
+# Written in the monorepo under `sdk/appwin-react-native/`, run in the published
+# mirror: GitHub reads workflows from the repository root alone. See the note in
+# the iOS mirror's workflow for why it is authored here and not there.
+#
+# TypeScript only. The bridge's Kotlin module is compiled by `pnpm sdk:check` in
+# the monorepo, against a Gradle harness that supplies what a host app would and
+# resolves the AARs from `~/.m2`. Here they would come from Maven Central, at a
+# version this repository's own release has usually not published yet.
+
+on:
+  # Callable as the gate of publish.yml: the registry push waits for green.
+  workflow_call:
+  workflow_dispatch:
+  # No push trigger: a mirror's main only moves at release time, and the
+  # Publish workflow already runs this file as its gate - running it twice
+  # per release burns runner time for nothing.
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` runs the `prepare` hook, which builds with bob: the typecheck
+      # below therefore covers the published entry points too.
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
