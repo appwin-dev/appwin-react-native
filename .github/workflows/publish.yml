@@ -1,0 +1,49 @@
+name: Publish
+
+# This file lives in the monorepo under `sdk/appwin-react-native/` and runs
+# only in the published mirror (same travel mechanism as ci.yml). It fires on
+# the release tag that `sdk/scripts/release.mjs --push` creates.
+#
+# NO secret at all: npm trusts this repository through OIDC (trusted
+# publishing). One-time setup on npmjs.com > @appwin/react-native >
+# Settings > Trusted Publisher: GitHub Actions, repository
+# `appwin-dev/appwin-react-native`, workflow `publish.yml`.
+
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  id-token: write # OIDC token exchange with npm
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+
+jobs:
+  # Same validation as a push to main: publishing waits for green.
+  checks:
+    uses: ./.github/workflows/ci.yml
+  npm:
+    needs: checks
+    name: npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+
+      # OIDC publishing needs a recent npm client, whatever the runner
+      # image shipped with.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      # `prepare` runs bob build, so the published tarball carries lib/.
+      - name: Install and publish
+        run: |
+          npm install
+          npm publish --provenance --access public
